@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+require("dotenv").config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -6,5 +7,6 @@ const pool = new Pool({
     rejectUnauthorized: false, // required for Neon
   },
 });
-
-module.exports = pool;
+module.exports = {
+  query: (text, params) => pool.query(text, params),
+};
