@@ -1,6 +1,3 @@
-
-
-
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
@@ -22,6 +19,7 @@ router.post("/", async (req, res) => {
 
     // Step 2: Upsert contacts and get their IDs
     const contactIdMap = new Map();
+    const contactsWithIds = [];
     for (const contact of contacts) {
       const result = await db.query(
         `INSERT INTO contacts (name, phone)
@@ -30,7 +28,9 @@ router.post("/", async (req, res) => {
          RETURNING id`,
         [contact.name || null, contact.phone]
       );
-      contactIdMap.set(contact.phone, result.rows[0].id);
+      const id = result.rows[0].id;
+      contactIdMap.set(contact.phone, id);
+      contactsWithIds.push({ ...contact, id });
     }
 
     // Step 3: Link contacts to campaign
@@ -46,7 +46,7 @@ router.post("/", async (req, res) => {
       );
     }
 
-    res.json({ success: true, campaignId, contacts: contactswithIds });
+    res.json({ success: true, campaignId, contacts: contactsWithIds });
   } catch (error) {
     console.error("Error creating campaign:", error);
     res.status(500).json({ error: "Internal server error" });
