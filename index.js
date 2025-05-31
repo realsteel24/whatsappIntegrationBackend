@@ -5,6 +5,7 @@ const sendMessage = require("./utils/sendMessage");
 const webhook = require("./webhook");
 const messages = require("./utils/messageStore");
 const contactsRoute = require("./routes/contacts");
+const campaignRoute = require("./routes/campaign");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -13,10 +14,11 @@ app.use(cors());
 app.use(express.json());
 app.use("/webhook", webhook);
 app.use("/api/contacts", contactsRoute);
+app.use("/api/campaigns", campaignRoute);
 
 // Updated bulk send endpoint
 app.post("/api/send-messages-bulk", async (req, res) => {
-  const { messages } = req.body;
+  const { messages, campaignId } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: "Missing or invalid messages array" });
@@ -38,6 +40,8 @@ app.post("/api/send-messages-bulk", async (req, res) => {
           messageText: msg.messageText,
           languageCode: msg.languageCode || "en",
           components: msg.components,
+          campaignId, // new
+          contactId: msg.contactId
         });
 
         console.log(
@@ -65,6 +69,7 @@ app.post("/api/send-messages-bulk", async (req, res) => {
     failed: errors.length,
     errors: errors.map((e) => e.error),
     total: messages.length,
+    campaignId: campaignId || null,
   });
 });
 

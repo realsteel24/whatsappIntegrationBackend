@@ -1,9 +1,13 @@
+const db = require("../db"); // Ensure you import your database module
+
 async function sendMessage({
   to,
   templateName,
   messageText,
   languageCode = "en",
-  components, // Now accepting components directly
+  components,
+  campaignId,
+  contactId,
 }) {
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
   const token = process.env.WA_ACCESS_TOKEN;
@@ -11,13 +15,6 @@ async function sendMessage({
   let body;
 
   if (templateName) {
-    console.log("=== TEMPLATE MESSAGE DEBUG ===");
-    console.log("Template:", templateName);
-    console.log("Language:", languageCode);
-    console.log("To:", to);
-    console.log("Components received:", JSON.stringify(components, null, 2));
-
-    // Template message structure
     body = {
       messaging_product: "whatsapp",
       to,
@@ -28,17 +25,10 @@ async function sendMessage({
       },
     };
 
-    // Add components if provided
     if (components && components.length > 0) {
       body.template.components = components;
-      console.log("Components added to template");
-    } else {
-      console.warn("No components provided for template message");
     }
-
-    console.log("Final payload being sent:", JSON.stringify(body, null, 2));
   } else if (messageText) {
-    // Plain text message fallback
     body = {
       messaging_product: "whatsapp",
       to,
@@ -65,14 +55,38 @@ async function sendMessage({
       }
     );
 
+    const data = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("API Error Details:", errorData);
-      return { success: false, error: errorData };
+      console.error("API Error Details:", data);
+
+      if (campaignId && contactId) {
+        await db.query(
+          `UPDATE campaign_contacts
+           SET status = 'failed'
+           WHERE contact_id = $1 AND campaign_id = $2`,
+          [contactId, campaignId]
+        );
+      }
+
+      return { success: false, error: data };
     }
 
-    const data = await response.json();
-    console.log("Success response:", data);
+    const messageId = data.messages?.[0]?.id;
+
+    if (!messageId) {
+      console.warn("No message ID returned from API");
+    }
+
+    if (messageId && campaignId && contactId) {
+      await db.query(
+        `UPDATE campaign_contacts
+         SET status = 'sent', message_id = $1, sent_at = CURRENT_TIMESTAMP
+         WHERE contact_id = $2 AND campaign_id = $3`,
+        [messageId, contactId, campaignId]
+      );
+    }
+
     return { success: true, data };
   } catch (error) {
     console.error("Network Error:", error);
