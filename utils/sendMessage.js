@@ -56,6 +56,7 @@ async function sendMessage({
     );
 
     const data = await response.json();
+    console.log(data);
 
     if (!response.ok) {
       console.error("API Error Details:", data);
@@ -81,7 +82,7 @@ async function sendMessage({
     if (messageId && campaignId && contactId) {
       await db.query(
         `UPDATE campaign_contacts
-         SET status = 'sent', message_id = $1, sent_at = CURRENT_TIMESTAMP
+         SET status = 'sent', message_id = $1, created_at = CURRENT_TIMESTAMP
          WHERE contact_id = $2 AND campaign_id = $3`,
         [messageId, contactId, campaignId]
       );
