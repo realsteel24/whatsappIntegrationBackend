@@ -1,9 +1,9 @@
 require("dotenv").config();
+const db = require("./db");
 const express = require("express");
 const cors = require("cors");
 const sendMessage = require("./utils/sendMessage");
 const webhook = require("./webhook");
-const messages = require("./utils/messageStore");
 const contactsRoute = require("./routes/contacts");
 const campaignRoute = require("./routes/campaign");
 
@@ -41,7 +41,7 @@ app.post("/api/send-messages-bulk", async (req, res) => {
           languageCode: msg.languageCode || "en",
           components: msg.components,
           campaignId, // new
-          contactId: msg.contactId
+          contactId: msg.contactId,
         });
 
         console.log(
@@ -104,8 +104,20 @@ app.post("/api/send-messages", async (req, res) => {
   });
 });
 
-app.get("/api/messages", (req, res) => {
-  res.json(messages);
+app.get("/api/messages", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT messages.*, contacts.name AS contact_name, contacts.phone
+       FROM messages
+       JOIN contacts ON messages.contact_id = contacts.id
+       ORDER BY received_at DESC
+       LIMIT 100`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching messages from DB:", error);
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
 });
 
 app.post("/api/reply", async (req, res) => {
