@@ -7,6 +7,15 @@ const webhook = require("./webhook");
 const contactsRoute = require("./routes/contacts");
 const campaignRoute = require("./routes/campaign");
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function chunkArray(arr, size) {
+  const result = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -16,7 +25,7 @@ app.use("/webhook", webhook);
 app.use("/api/contacts", contactsRoute);
 app.use("/api/campaigns", campaignRoute);
 
-// Updated bulk send endpoint
+// Updated bulk send endpoint with rate limiting and chunking
 app.post("/api/send-messages-bulk", async (req, res) => {
   const { messages, campaignId } = req.body;
 
@@ -27,38 +36,47 @@ app.post("/api/send-messages-bulk", async (req, res) => {
   console.log(`Processing ${messages.length} messages...`);
   console.log("First message structure:", JSON.stringify(messages[0], null, 2));
 
-  const results = await Promise.all(
-    messages.map(async (msg, index) => {
-      try {
-        console.log(`\n--- Processing message ${index + 1} ---`);
-        console.log("Message data:", JSON.stringify(msg, null, 2));
+  const chunks = chunkArray(messages, 20);
+  let results = [];
 
-        // Pass all parameters to sendMessage
-        const result = await sendMessage({
-          to: msg.to,
-          templateName: msg.templateName,
-          messageText: msg.messageText,
-          languageCode: msg.languageCode || "en",
-          components: msg.components,
-          campaignId, // new
-          contactId: msg.contactId,
-        });
+  for (const [index, chunk] of chunks.entries()) {
+    console.log(`Sending batch ${index + 1} of ${chunks.length}...`);
 
-        console.log(
-          `Message ${index + 1} result:`,
-          result.success ? "SUCCESS" : "FAILED"
-        );
-        if (!result.success) {
-          console.log(`Message ${index + 1} error:`, result.error);
+    const batchResults = await Promise.all(
+      chunk.map(async (msg, i) => {
+        try {
+          console.log(`\n--- Processing message ${index * 20 + i + 1} ---`);
+          console.log("Message data:", JSON.stringify(msg, null, 2));
+
+          const result = await sendMessage({
+            to: msg.to,
+            templateName: msg.templateName,
+            messageText: msg.messageText,
+            languageCode: msg.languageCode || "en",
+            components: msg.components,
+            campaignId,
+            contactId: msg.contactId,
+          });
+
+          console.log(
+            `Message ${index * 20 + i + 1} result:`,
+            result.success ? "SUCCESS" : "FAILED"
+          );
+          if (!result.success) {
+            console.log(`Message ${index * 20 + i + 1} error:`, result.error);
+          }
+
+          return result;
+        } catch (error) {
+          console.error(`Error sending to ${msg.to}:`, error);
+          return { success: false, error: error.message };
         }
+      })
+    );
 
-        return result;
-      } catch (error) {
-        console.error(`Error sending to ${msg.to}:`, error);
-        return { success: false, error: error.message };
-      }
-    })
-  );
+    results = results.concat(batchResults);
+    await delay(1000); // Pause 1 second between batches
+  }
 
   const successCount = results.filter((r) => r.success).length;
   const errors = results.filter((r) => !r.success);

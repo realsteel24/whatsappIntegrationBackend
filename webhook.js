@@ -57,16 +57,35 @@ router.post("/", async (req, res) => {
     if (statusUpdate) {
       const messageId = statusUpdate.id;
       const status = statusUpdate.status;
+      const errorTitle = statusUpdate.errors?.[0]?.title;
+
+      let refinedStatus = status;
+
+      if (status === "failed" && errorTitle) {
+        switch (errorTitle) {
+          case "Message undeliverable":
+            refinedStatus = "not_whatsapp_user";
+            break;
+          case "Meta chose not to deliver":
+            refinedStatus = "meta_blocked";
+            break;
+          case "Rate limit hit":
+            refinedStatus = "rate_limited";
+            break;
+          default:
+            refinedStatus = `failed:${errorTitle.toLowerCase().replace(/\s+/g, "_")}`;
+        }
+      }
 
       const result = await db.query(
         `UPDATE campaign_contacts
          SET status = $1
          WHERE message_id = $2`,
-        [status, messageId]
+        [refinedStatus, messageId]
       );
 
       if (result.rowCount > 0) {
-        console.log(`🔄 Status '${status}' updated for message ${messageId}`);
+        console.log(`🔄 Status '${refinedStatus}' updated for message ${messageId}`);
       } else {
         console.warn(`❗ No campaign contact found for message_id: ${messageId}`);
       }
