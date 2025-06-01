@@ -57,25 +57,18 @@ router.post("/", async (req, res) => {
     if (statusUpdate) {
       const messageId = statusUpdate.id;
       const status = statusUpdate.status;
-      const timestamp = statusUpdate.timestamp;
-      const phone = statusUpdate.recipient_id;
 
-      const contactRes = await db.query(
-        `SELECT id FROM contacts WHERE phone = $1`,
-        [phone]
+      const result = await db.query(
+        `UPDATE campaign_contacts
+         SET status = $1
+         WHERE message_id = $2`,
+        [status, messageId]
       );
-      const contactId = contactRes.rows?.[0]?.id;
 
-      if (contactId && messageId) {
-        const result = await db.query(
-          `UPDATE campaign_contacts
-           SET status = $1
-           WHERE contact_id = $2 AND message_id = $3`,
-          [status, contactId, messageId]
-        );
+      if (result.rowCount > 0) {
         console.log(`🔄 Status '${status}' updated for message ${messageId}`);
       } else {
-        console.warn("❗ Status update skipped: contact or messageId missing");
+        console.warn(`❗ No campaign contact found for message_id: ${messageId}`);
       }
     }
 
